@@ -1,0 +1,118 @@
+---
+title: "Practica procesos estocasticos"
+date: '3-2-22'
+output: html_document
+---
+
+## Simulacion de procesos
+Este código simularemos un proceso de Wiener Generalizado y observaremos la variable que siga un comportamiento de ese tipo.
+
+$$
+dw=\epsilon\sqrt{dt}
+$$
+Donde 
+$$
+\epsilon~N(0,1)
+$$
+
+```{r Iniciar, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+set.seed(123)
+sim <- 1000
+dt <-  1/sim
+epsilon <- rnorm(n=1000, mean=0, sd=1)
+dw <-  epsilon*sqrt(dt)
+```
+
+```{r}
+datos <- tibble(t=seq(1/sim,1, by=1/sim),dw) #View(...) para verlos 
+ggplot(datos)+
+  geom_line(aes(x=t,y=dw),color='Pink')+
+  labs(x='Tiempo',y='Valor dw', title='Proceso de Winer')
+```
+¿Cómo seria W?
+$$
+W_t=W_{t-1}+dw_t
+$$
+```{r}
+W <- 0
+W[1] <- 0
+for(t in 2:sim){
+  W[t]=W[t-1]+dw[t]
+}
+datos <- mutate(datos, W=W)
+
+ggplot(datos)+
+  geom_line(aes(x=t,y=W),color='skyblue4')+
+  geom_smooth(aes(x=t,y=W),method = 'lm',color='tomato3')
+```
+##Proceso de Wiener Generalizado
+En este Caso
+$$
+dX=adt+bdw
+$$
+
+```{r}
+a <- .3
+b <- .15
+dx <- a*dt+b*dw
+
+```
+Ahora X sería
+$$
+X_t=X_{t-1}+dx_t
+$$
+Resolviendo un problema
+```{r}
+X <- 0
+X[1] <- 0
+for(t in 2:sim){
+  X[t]=X[t-1]+dx[t]
+}
+#plot(X)
+```
+Para graficar
+```{r}
+datos <- mutate(datos, X=X)
+
+ggplot(datos)+
+  geom_line(aes(x=t,y=X),color='orange1')+
+  geom_smooth(aes(x=t,y=X),method = 'lm',color='peru')
+```
+
+##Resolviendo un Problema
+Una determinada variable sigue un proceso de WG, con una drift rate de 2 y una tasa de varianza
+de 4. Ambas con unidad de tempo semestral. Si el día de hoy la variable X toma el valor de 50
+
+Del desastre que hicimos la clase pasada, ya sabemos que
+$$
+dx_a=4+2\sqrt{2}\epsilon
+$$
+Representa el cambio en VA dentro de un año.
+```{r}
+dxa <- 4+2*sqrt(2)*epsilon
+xa <- 50+dxa
+```
+En este caso Xa contiene muchos valores para un solo punto en el tiempo. Antes lo que observamos era la evolución de todos los valores de X.
+
+• ¿Cuál es el valor esperado y la varianza de X dentro de 1 año?
+```{r}
+mean(xa)
+var(xa)
+```
+• ¿Cuáles son las probabilidades de que el cambio en X, sea mayor a
+cero ?
+```{r}
+mean(dxa>0)
+```
+• ¿Cuáles son las probabilidades de que el cambio en X, sea mayor a
+cero ?
+```{r}
+mean(dxa<0)
+```
+
+• ¿Cuáles son las probabilidades que la variable X se ubique entre 50
+y 51?
+```{r}
+mean(xa>50&xa<=51)
+```

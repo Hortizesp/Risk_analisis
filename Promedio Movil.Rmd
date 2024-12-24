@@ -1,0 +1,140 @@
+---
+title: "Promedio Movil"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r librerias, warning=FALSE, include=FALSE}
+library(quantmod)
+library(tidyverse)
+library(PerformanceAnalytics)
+library(lubridate)
+library(TTR)
+```
+
+```{r}
+clave <- 'GFNORTEO.MX'
+datos <- new.env()
+getSymbols(clave,env=datos)
+precio <- datos[[clave]][,6]#columna 6
+```
+
+Ahora para poder aplicar este modelo, necesito estimar rendimiento
+diario ynlo elevamos al cuadrado para poder aplicar el modelo.Esto
+significa que la forma más sencilla de estimacion de la varianza para un
+punto del tiempo, es simplemente el rendimiento cuadrado.
+
+```{r}
+rend_c <- na.omit(diff(log(precio)))^2
+```
+
+Con el rendimiento al cuadrado, ya podemos hacer la estimación de la
+varianza considerando los ultimos m diarios de información.
+
+```{r}
+Var_Est_5 <- SMA(rend_c,n=5)
+Var_Est_10 <- SMA(rend_c,n=10)
+Var_Est_20 <- SMA(rend_c,n=20)
+Var_Est_40 <- SMA(rend_c,n=40)
+```
+
+Ya hemos estimado la varianza para cada uno de los valores de M. Vamos a
+fraficarlos para diferenciarlos.
+
+```{r}
+layout(matrix(c(1,2,3,4),2,2, byrow = TRUE))
+plot(rend_c,main='Rend obs')
+plot(Var_Est_5, main = 'Varianza 5')
+plot(Var_Est_10, main = 'Varianza 10')
+plot(Var_Est_20, main = 'Varianza 20')
+plot(Var_Est_40, main = 'Varianza 40')
+```
+
+Diferencia los valores, buscar el de menor error ninguno es perfecto.
+Decidir el mejor valor de M, comparar estimaciones con el valor real y
+calcular la raiz media de los errores al cuadrado(RMSE). H numero de
+veces que se hace el promedio.
+
+##### RMSE
+
+$$RMSE=\sqrt{\frac{1}-{H}\sum_{i=1}^n(R_i^2-\sigma_i^2)^2}$$
+
+```{r}
+Dif_Est <- merge.xts((Var_Est_5-rend_c)^2,(Var_Est_10-rend_c)^2,(Var_Est_20-rend_c)^2,(Var_Est_40-rend_c)^2)
+names(Dif_Est) <- c('m5','m10','m20','m40')
+```
+
+Graficamos las diferencias para ver como se comportan los modelos con el
+valor real
+
+```{r}
+plot(Dif_Est, main='Diferencias en la estimación', legend.loc = 'top',
+     lwd =5 )#grosor de la linea
+```
+
+ERROR más visto es m40 porque toma más tiempo, en escalas el error más
+grande es 1e-03 tendiendo a 0. Calculamos el RMSE
+
+```{r}
+RMSE <- as.data.frame(sqrt(colMeans(na.omit(Dif_Est))))
+names(RMSE) <- c('RMSE')
+```
+
+En este caso m=5, genera el menor error (RMSE) Tenemos otros elementos
+para ayudarnos a determnar si es la mejor opción de el valor que me
+regresa RMSE. El primero de ellos:
+
+#####  Valor absoluto de los errores (error absoluto medio proporcional) $$EAMP=\frac{1}-{H}\sum_{i=1}^n|R_i^2-\sigma_i^2| $$
+
+```{r}
+Dif_Est2 <- merge.xts(abs(Var_Est_5-rend_c),
+                      abs(Var_Est_10-rend_c),
+                      abs(Var_Est_20-rend_c),
+                      abs(Var_Est_40-rend_c))
+names(Dif_Est2) <- c('m5','m10','m20','m40')
+```
+
+```{r}
+EAMP <- as.data.frame(colMeans(na.omit(Dif_Est2)))
+names(EAMP) <- c('EAMP')
+EAMP
+```
+
+***IMPORTANTE***
+
+***Son 3 indicadores si dos coinciden y uno difere la mayoria gana. Si
+cada uno da uno distinto nos quedamos con RMSE***
+
+Ultimo indicador:
+
+##### Error cuadrático promédio porcentual 
+$$ECPP=\sqrt{\frac{1}-{H}\sum_{i=1}^n(R_i^2-\sigma_i^2/R_i^2)^2}$$
+R= real(rend_c), sigma=estimada(var_est_x)
+```{r}
+Dif_Est3 <- merge.xts(((Var_Est_5-rend_c)/rend_c)^2,
+                      ((Var_Est_10-rend_c)/rend_c)^2,
+                      ((Var_Est_20-rend_c)/rend_c)^2,
+                      ((Var_Est_40-rend_c)/rend_c)^2)
+names(Dif_Est3) <- c('m5','m10','m20','m40')
+Dif_Est3 <- subset(Dif_Est3,Dif_Est3$m5!=Inf)
+```
+
+```{r}
+ECPP <- as.data.frame(sqrt(colMeans(na.omit(Dif_Est3))))
+names(ECPP) <- c('ECPP')
+ECPP
+```
+El mejor valor de m, para mi modelo de varianza con el promdio movil es de 5 dias.
+
+Vamos a efectuar ahora la estimación para el día siguiente.
+Aquí me voy a poner muy listo, por que el valor de m no sale automatico de mi codigo. De manera manual debo analizar cual es el mejor, puedo mejorar este código buscando la forma que m se genere y obtenga el valor optimo.
+
+```{r}
+library(xts)
+m <- 5 #manera manual
+Vol_fut <- sqrt(mean(xts::last(rend_c,m)))
+Vol_fut
+```
+

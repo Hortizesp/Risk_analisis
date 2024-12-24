@@ -1,0 +1,88 @@
+---
+title: "VAR no paramétrico de acciones con simulación Montecarlo"
+output: html_document
+author: 'Montse OP'
+date: '25/04/2022'
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(quantmod)
+library(lubridate)
+library(PerformanceAnalytics)
+```
+
+```{r message=FALSE, warning=FALSE}
+clave1 <- 'GFNORTEO.MX'
+clave2 <- 'BIMBOA.MX'
+datos <- new.env()
+getSymbols(clave1, env = datos)
+getSymbols(clave2, env = datos)
+```
+
+```{r}
+precio1 <- datos[[clave1]][,6]
+precio2 <- datos[[clave2]][,6]
+```
+
+**Paso 1:Calcular el valor de un portafolio ficticio a través del tiempo. En este, mi portafolio tendrá 100 acciones de cada activo.**
+
+```{r}
+a1 <- 100
+a2 <- 100
+
+v_porta <- a1 * precio1 + a2 * precio2
+```
+
+```{r}
+plot(v_porta)
+```
+
+**Paso 2: Calcular los rendimientos de cada activo.**
+
+```{r}
+rend1 <- na.omit(diff(log(precio1)))
+rend2 <- na.omit(diff(log(precio2)))
+```
+
+**Paso 3: Calcular un valor inicial de portafolio.**
+
+¿Cuánto vale mi portafolio hoy?
+
+```{r}
+pi1 <- as.numeric(last(precio1))    #St
+pi2 <- as.numeric(last(precio2))
+pi1
+pi2
+```
+
+```{r}
+vi <- a1 * pi1 + a2 * pi2
+vi
+```
+
+Trataremos de construir el valor de este portafolio bajo diferentes escenarios, es decir, ¿cuál creemos que será el valor de nuestro portafolio para el día de mañana?.
+
+**Paso 4: Estimar precios de los activos para el día siguiente.**
+
+Para ello necesito hacer simulaciones del precio. Estas simulaciones para cada precio están basadas en la siguiente ecuación:
+
+$$
+S_T = S_0 e^{(\mu - 0.5\sigma^2)dt + \sigma dW}
+$$
+```{r}
+dt <- 1
+
+mu <- mean(rend1)
+mu2 <- mean(rend2)
+sigma <- sd(rend1)
+sigma2 <- sd(rend2)
+
+epsilon <- rnorm(n = 10000)
+
+s1 <- pi1 * exp(((mu - 0.5*sigma^2)*dt) + (sigma*sqrt(dt)*epsilon))
+mean(s1)
+
+s2 <- pi2 * exp(((mu2 - 0.5*sigma^2)*dt) + (sigma2*sqrt(dt)*epsilon))
+mean(s2)
+```
+

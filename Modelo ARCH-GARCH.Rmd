@@ -1,0 +1,138 @@
+---
+title: "ARCH-GARCH"
+output: html_document
+---
+Funcion ARCH
+```{r}
+ArchTest <- function (x, lags=20, demean = FALSE) 
+{
+  # Capture name of x for documentation in the output  
+  xName <- deparse(substitute(x))
+  # 
+  x <- as.vector(x)
+  if(demean) x <- scale(x, center = TRUE, scale = FALSE)
+  #  
+  lags <- lags + 1
+  mat <- embed(x^2, lags)
+  arch.lm <- summary(lm(mat[, 1] ~ mat[, -1]))
+  STATISTIC <- arch.lm$r.squared * length(resid(arch.lm))
+  names(STATISTIC) <- "Chi-squared"
+  PARAMETER <- lags - 1
+  names(PARAMETER) <- "df"
+  PVAL <- 1 - pchisq(STATISTIC, df = PARAMETER)
+  METHOD <- "ARCH LM-test;  Null hypothesis:  no ARCH effects"
+  result <- list(statistic = STATISTIC, parameter = PARAMETER, 
+                 p.value = PVAL, method = METHOD, data.name =
+                   xName)
+  class(result) <- "htest"
+  return(result)
+}
+```
+
+AUTO REGRESIVE CONDITIONAL HETEROSCEDASTICITY
+Rendimiento $R_t=\mu+v_t$
+$\mu$ = rendimiento promedio
+$v_t$ = termino aleatorio
+varianza de $v_t$ tiene el comportamiento de $\sigma^2_t$
+donde
+  $\sigma^2_t$ = $\alpha_0+\alpha_1v^2_t-_1+\alpha_2v^2_t-_2+\alpha_pv^2_t-_p$
+$v_t=R_t-\mu$
+$\sigma^2_t+_1=\alpha_1+\alpha_2(R_2-\mu)^2+\alpha_3(R_3-\mu)^2+...$
+$\mu=0$(tiende)
+$\sigma^2_t=\alpha_0+\alpha_1R^2_t-_1+\alpha_2R^2_t-_2+...\alpha_pR^2_t-_p$
+consideraciones a estos modelos 
+*Determinar un p=número
+*$\alpha_0=w=\gamav_t$:varianza de largo plazo, multiplicador por un ponderador.
+...
+
+$ARCH(p): \sigma^2_t=w+(_p\sum_i=_1)\alpha_iR^2_t-_1$
+
+$GARCH(p): \sigma^2_t=w+(_p\sum_i=_1)\alpha_i+(_q\sum_i=_1)B_i=1$
+Vamos a ajustar un modelo ARCH-GARCH al rendimiento de un activo.
+```{r}
+library(PerformanceAnalytics)
+library(quantmod)
+library(tidyverse)
+```
+
+```{r}
+clave <- 'GFNORTEO.MX'
+datos <- new.env()
+getSymbols(clave,env=datos)
+precio <-datos[[clave]][,6]
+```
+Ahora vamos aobtener el rendimiento del activo
+```{r}
+rend <- na.omit(diff(log(precio)))
+```
+Lo primero que necesito para este modelo es que la varianza que voy a modelar no sea constante. Esto se puede observar en la sigiente grafica como tiene subidas de manera visual.
+```{r}
+plot(rend^2)
+```
+Después tenemo que asegurarnos que tiene efecto ARCH-GARCH. Es decir, qie exiten en nuestros datos efectos de rezagos. Para elloefectuamos una prueba de hipotesis de la siguiente manera. 
+Ho: No hay efecto ARCH-GARCH
+Ha: Si hay efectos ARCH-GARCH
+La prueba que efectuaremos, se llama ARCH test.
+```{r}
+ArchTest(rend)
+```
+sabemos que para rechazar Ho, en una prueba de hipotesis se debe cumplir que: p-value sea menor o igual que un determinado nivel de significancia. Por ejemplo, con un nivel de significancia del 5%, tendriamos que
+
+p-value < 2.2e-16 lo cual es verdadero, entonces, rechazamos Ho. Por lo que decimos que enemos suficiente evidencia la posibilidad de que NO tengamos efectos ARCH/GARCH. Lo que significa que seguramente si hay efectos ARCH/GARCH
+
+De manera visuial, podemos observar lo siguiente
+```{r}
+library(forecast)
+library(tseries)
+```
+
+```{r}
+tsdisplay(rend)
+```
+Ya que estamos seguros que tenemos estos efectos por ver visualmente ACF y PACF la correlacion tener cambio considerada. Podemos proceder a ajustar el modelo.
+
+Paso 2: Encontremos el mejor modelo para nuestros datos.
+Para ello podemos suponer dos casos.
+Caso 1: La media de los rendimientos aunque pequeña es constante Es decir $R_t=\mu+\nu_t $
+
+Caso 2: La media de los rendimientos no es constante y cambia en cada punto del tiempo, es decir $R_t=\mu_t`+\nu_t$. 
+Ademas de los diferentes casos, el ajuste de un modelo de ese tipo, considera lo que se conoce como el principio de parsimonia. Este establece que el mejor modelo, no solo es el que se ajusta mejor sino ademas, el más sencillo.
+
+EL procedimiento es el siguiente: probamos con diversos modelos, y nos quedamos con el que tenga un mayor verosililitud, la cual se contabiliza con dos indicadores,AIC y BIC. Estos indicadores nos muestran una relación entre el ajuste del modelo y la complejidad. De manera que
+$$AIC-2K-2ln(L)$$
+$$BIC=Kln(N)-2ln(L)$$
+Donde K es el número de parametros de la estimación y Les la verosimilitud, N es el número de datos. Prefiero
+indicadores AIC y BIC con valores bajos.
+Empecemos con el caso 1. Media constante
+```{r}
+library(fGarch)
+```
+Probemos los siguientes modelos
+ARCH(1), GARCH(1,1),GARCH(2,1),GARCH(2,2),ARCH(2) *(Entre más log Likelihood mejor y menor AIC BIC mejor )
+```{r}
+Arch1 <- garchFit(formula = ~garch(1,0),data = na.omit(rend),cond.dist = 'norm',trace = FALSE)
+summary(Arch1)
+```
+L=9,122.149 AIC=-4.781935 BIC=-4.777021
+```{r}
+Garch11 <- garchFit(formula = ~garch(1,1),data = na.omit(rend),cond.dist = 'norm',trace = FALSE)
+summary(Garch11)
+```
+L=9,462.07 AIC=-4.959659 BIC=-4.953108
+
+```{r}
+Garch21 <- garchFit(formula = ~garch(2,1),data = na.omit(rend),cond.dist = 'norm',trace = FALSE)
+summary(Garch21)
+```
+-Este modelo no sirve porque el parametro alpha 2 no es significativo ya que es 1 (entre más * mas significativo)
+```{r}
+Garch12 <- garchFit(formula = ~garch(1,2),data = na.omit(rend),cond.dist = 'norm',trace = FALSE)
+summary(Garch12)
+```
+L=9,464.855 AIC=-4.960595 BIC=-4.952406 En este caso aunque mejora L y BIC AIC tiene un mayor grado de complejidad y su diferencia no es significativa.
+
+*Después de hacer una comparacion con diferentes modelos con aquel que nos ofrezca el mejor ajuste en terminos de el valor de su función de verosimilitud y de los indicadores AIC y BIC.
+
+**Usualmente** el mejor modelo que usamos para las series manejamos el GARCH(1,1)
+
+Que nos falta, comparar el modelo con la varianza real, y hacer estimaciones para la varianza futura. Ademas de

@@ -1,0 +1,130 @@
+---
+title: "Untitled"
+author: "Rous"
+date: "11/23/2021"
+output: html_document
+---
+
+VaR No Paramétrico de un Bono. Usaremos simulación histórica para estimar valores futuros de la tasa de interés 
+
+**Supongamos que tenemos un bono con un valor nominal de 2500, un vencimiento a tres años, y que paga ua tasa cupón semestral del 5%**. Determinar el VaR a sus tres niveles mas comunes. 
+
+
+Lo primero que necesito es sacar el precio del bono, con la tasa de interés más reciente. 
+
+```{r}
+#setwd("~/Dropbox/Iteso/Otoño_2021/Análisis del Riesgo")
+library(readxl)
+library(PerformanceAnalytics)
+library(lubridate)
+library(quantmod)
+TB <- read_xlsx("TB.xlsx")
+TB <- subset(TB, SF43883!="N/E")
+TB$SF43883 <- as.numeric(TB$SF43883)/100
+Tasa <- xts(TB$SF43883, order.by =date(TB$Fecha))
+```
+
+```{r}
+plot(Tasa)
+```
+
+Tasa_I contiene la tasa más actual, con la cual descontaremos los flujos de efectivo que genera el bono
+
+```{r}
+meses <- nrow(Tasa)
+Tasa_I <- as.numeric(Tasa[meses])
+Tasa_I
+```
+
+Aquí vamos construir la matriz de flujos que se generan en el transcurso del bono
+
+```{r}
+t <- 3 #vencimiento
+m <- 2 #cuantas veces al año se paga el cupón
+nf <- t*m #numero de flujos que tendremos
+tc <-  .05 #tasa cupon
+flujos <- matrix(0, nf,4) #matriz donde estaran los flujos
+vn <- 2500 #valor nominal
+cupon <- vn*tc
+```
+
+```{r}
+for (i in 1:(nf-1)) {
+  flujos[i,1]<-cupon
+}
+flujos[nf,1] <- cupon+vn
+```
+
+Ahora traemos a valor presente esos flujos y sacamos el precio actual del bono
+
+```{r}
+for (i in 1:nf) {
+  flujos[i,2] <- flujos[i,1]/(1+Tasa_I/m)^i
+}
+pb <- colSums(flujos)[2]
+pb
+```
+
+Ya tenemos un valor de partida, que sería el equivalente al valor inicial. Nuestro objetivo es determinar posibles valores de la tasa para la próxima emisión para determinar el precio de este bono (o uno con las mismas caracteristicas) en el futuro.
+
+Para ello simularemos tasa de interés usando el método de simulación histórica.
+
+```{r}
+Rend_Tasa <- na.omit(diff(log(Tasa)))
+esc <- seq(1:(meses-1))
+Tasa_Est <- as.data.frame(Tasa_I*(Rend_Tasa+1), row.names=paste("Esc",esc))
+```
+
+Ahora, con estas tasas estimadas, vamos a calcular el precio del bono bajo cada escenario.
+
+En flujos2 estarán los descuentos de los flujos bajo cada posible escenario
+
+```{r}
+flujos2 <- matrix(0,nf,meses)
+for (i in 1:(nf-1)) {
+  flujos2[i,1]<-cupon
+}
+flujos2[nf,1]<-cupon+vn
+#traemos a vp cada flujo con cada tasa
+for (i in 1:nf) {
+  for (j in 2:meses) {
+    flujos2[i,j] <- flujos2[i,1]/(1+Tasa_Est[j-1,1]/m)^i
+  }
+}
+```
+
+Bajo cada uno de esos diferentes escenarios, el precio del bono es diferente.
+
+```{r}
+pb_estimado <- colSums(flujos2)
+pb_estimado <- pb_estimado[2:meses]
+pb_estimado
+```
+
+COn todas las estimaciones construimos una función de pérdidas y ganancias. 
+
+
+```{r}
+fpg <- pb_estimado-pb
+hist(fpg, n=50)
+```
+
+Finalmente sacamos el VaR usando los cuantiles 
+
+
+```{r}
+VaR99 <- quantile(fpg, .01)
+VaR99
+VaR95 <- quantile(fpg, .05)
+VaR95
+VaR90 <- quantile(fpg, .1)
+VaR90
+```
+
+Este VaR es para mas o menos
+
+```{r}
+date(Tasa[meses])+30
+```
+
+

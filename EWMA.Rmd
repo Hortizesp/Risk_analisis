@@ -1,0 +1,120 @@
+---
+title: "EWMA"
+output: html_document
+date:'2022-03-14'
+---
+En estre código buscaremos el valor óptimo del parametro $\lambda$del modelo EWMA.
+Ya sabemos que el modelo tiene esta forma 
+$$\sigma_t^2=(1-\lambda)R^2_{t-1}+\lambda\sigma^2_{t-1}$$
+Para obtener $\lambda$ necesitamos maximizar la funcion de verosimilitud, dada por
+$$\sum[-ln(\sigma^2i)-\frac{R_i^2}{\sigma_i^2}]$$
+Descripcion de como este proceso:
+
+Bajar datos de un activo
+```{r librerias, warning=FALSE, include=FALSE}
+library(quantmod)
+library(tidyverse)
+library(PerformanceAnalytics)
+library(lubridate)
+library(fTrading)
+```
+
+```{r}
+clave <- 'GFNORTEO.MX'
+datos <- new.env()
+getSymbols(clave,env=datos)
+precio <- datos[[clave]][,6]
+```
+Necesitaremos el rendimiento diario al cuadrado
+```{r}
+Rc <- na.omit(diff(log(precio)))^2
+plot(Rc)
+```
+No olvidemos que el rendimiento al cuadrado es la estimación más sencilla de la varianza para un día. Por lo tanto, la raíz del rendimiento al cuadrado, es la estimación más sencilla para la volatilidad.
+$$\sigma_i=\sqrt{R_i^2}$$
+Estimaciones de las varianzas, vamos a definir los objetos iniciales que vamos a necesitar para hacer tanto la estimacion de la varianza, como la estimacón de la funcion de verosimilitud.
+```{r}
+n <- length(Rc)
+Var_Est <- matrix(nrow =n-1 ,ncol = 1)
+Func <- matrix(nrow =n-1 ,ncol = 1)
+```
+En el proceso necesitamos una varianza inicial, la cual será el primer valor de Rc(rendimiento al cuadrado)
+```{r}
+Var_Est[1] <- Rc[1]
+```
+
+```{r}
+lambda <- .8
+for (i in 2:(n-1)){
+  Var_Est[i] <- (1-lambda)*Rc[i-1]+lambda*Var_Est[i-1]
+  Func[i] <- -log(Var_Est[i])-Rc[i]/Var_Est[i]
+}
+sum(na.omit(Func))
+```
+Como necesitamos decidir entre todos los posibles valores de lambda necesitamos otro ciclo for:
+```{r}
+j <- 0
+a <- seq(.01,.99,by=.01)
+Resultados <- matrix(nrow = length(a),ncol = 2)
+for (L in a){
+  for (i in 2:(n-1)){
+  Var_Est[i] <- (1-L)*Rc[i-1]+L*Var_Est[i-1]
+  Func[i] <- -log(Var_Est[i])-Rc[i]/Var_Est[i]
+  }
+  j <- j+1
+  Resultados[j,1] <- L
+  Resultados[j,2] <- sum(na.omit(Func))
+}
+```
+
+Ya tenemos muchos posibles valores de Lambda, vamos a escoger el valor maximo de la funcion de verosililitud
+```{r}
+Loptimo <-Resultados[order(Resultados[,2],decreasing = TRUE)][1]
+Loptimo
+```
+Tenemo esntonces que el modelo EWMA esta dado por 
+$$\sigma_t^2=(1-\´r Loptimo´)R^2_{t-1}+\´r Loptimo´\sigma^2_{t-1}$$
+Que nos falta...
+Estimar la varianza con el valor Loptimo y compararla con la varianza real obtenida .
+Usar el modelo para generar una estimación de varianza para el día 
+
+Con este valor de lambda que obtuvimos lo que haremos será obtener las estimaciones de varianza
+```{r}
+Var_Est_EWMA <- xts(emaTA(Rc,Loptimo),order.by=date(Rc))
+```
+
+```{r}
+par(mfrow=c(1,2))
+plot(Rc)
+plot(Var_Est_EWMA)
+```
+Ya por último para este modelo, vamos a aventurarnos a efectuar una estimacón de volatilidad (varianza) para un día.
+
+```{r}
+Varianza <- (1-Loptimo)*as.numeric(Rc[length(Rc)])+Loptimo*as.numeric(Var_Est_EWMA[length(Var_Est_EWMA)])
+Vol_futura <- sqrt((1-Loptimo)*as.numeric(Rc[length(Rc)])+Loptimo*as.numeric(Var_Est_EWMA[length(Var_Est_EWMA)]))
+Vol_futura
+```
+
+Vamos a buscar la fecha para la cual corresponde la volatilidad
+```{r}
+Fecha_fut <- date(Var_Est_EWMA[length(Var_Est_EWMA)])+1
+Fecha_fut
+```
+
+Si el preio del día 16 es de
+```{r}
+precio[length(precio)]
+```
+
+lo que esperamos es que haya una variacion de este valor
+```{r}
+as.numeric(precio[length(precio)])*Vol_futura
+```
+```{r}
+last(precio)*Vol_futura #nueva forma de hacerlo
+```
+```{r}
+
+```
+

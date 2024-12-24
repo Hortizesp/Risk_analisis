@@ -1,0 +1,61 @@
+---
+title: "VaR paramétrico bonos"
+output: html_document
+author: 'Humberto Ortiz '
+---
+
+Calcular el VaR de un bono con vencimiento a 2 años, que paga una tasa cupón semestral del 10% con un valor nominal de 1,000. La tasa de interés es de 6% anual, con una volatilidad semanal de 1.15%.
+
+```{r}
+vol_tasa_interés = 0.0115
+tasa_int = 0.06
+vn = 1000   #valor nominal
+tasa_cup = 0.1
+
+t <- 2 #vencimiento
+m <- 2 #cuantas veces al año se paga el cupón
+nf <- t*m #numero de flujos que tendremos
+  
+var = 0.99
+z = qnorm(1 - var)
+
+
+flujos <- matrix(0, nf,4) #matriz donde estaran los flujos
+cupon <- vn*tasa_cup
+```
+
+```{r}
+for (i in 1:(nf-1)) {
+  flujos[i,1]<-cupon
+}
+flujos[nf,1] <- cupon+vn
+```
+
+```{r}
+for (i in 1:nf) {
+  flujos[i,2] <- flujos[i,1]/(1+tasa_int/m)^i
+}
+
+for (i in 1:nf) {
+  flujos[i,3] <- flujos[i,2]/colSums(flujos)[2]
+}
+
+pb <- colSums(flujos)[2]
+pb
+```
+
+```{r}
+for (i in seq((m/nf), t, by = (m/nf))) {
+flujos[,4] <- flujos[,3] * i
+}
+
+dm <- (colSums(flujos)[4])/(1 + tasa_int)
+dm
+```
+
+
+```{r}
+var = z * pb * vol_tasa_interés * tasa_int * dm
+var
+```
+

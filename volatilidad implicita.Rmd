@@ -1,0 +1,73 @@
+---
+title: "VOlatilidad implicita"
+output: html_document
+---
+Vamos a calcular la volatilidad implicita
+```{r}
+library(derivmkts)
+library(ragtop)
+```
+Estas librerias nos permitendos cosas, 
+1) dado el conjunto de caracteristicas, de acuerdo con el modelo BS, estimar el precio de una opción.
+2)Dado el precio de una opción y otros componentes del modelo BS, estimar la volatilidad implicita.
+Según el modelo de BS, determina el precio de una opción:
+-volatilidad
+-strike(Ejercicio)
+-dividendo
+-vencimiento (tiempo)
+-spot
+```{r}
+library(quantmod)
+library(PerformanceAnalytics)
+library(lubridate)
+clave <- 'CEMEXCPO.MX'
+datos <- new.env()
+getSymbols(clave, from=today()-365,to=today(),env=datos)
+precio <- na.omit(datos[[clave]][,6])
+```
+
+```{r 3 meses}
+So <- as.numeric(last(precio))
+K <- 9 #precio de strike de la opcion que vemos factset
+r <- 0.0694
+t <- 3/12
+precio_call <- 2.16
+```
+```{r}
+bscallimpvol(s=So,k=K,r=r,tt=t,d=0,price=precio_call)
+```
+El valor que nos da es la volatilidad implicita en las opciones CALL a tres meses con precio de ejercicio 9. (54.43%) en tres meses
+
+La volatilidad que observo en estos momentos es
+```{r}
+rend <- na.omit(diff(log(precio)))
+vol_anual <- as.numeric(sqrt(var(rend)*252))
+```
+Volatilidad historica es de 38.53% lo que sigifica que las expectativas son de un incremento en e riesgo.
+
+Podemos hacer el proceso inverso. Esto es, podemos calcular el precio de la opcion usando la volatilidad historica.
+```{r}
+blackscholes(callput = 1,S0=So,K=K,r=r,time = t,vola =vol_anual )
+```
+Delta cambio de la opcion cuando cambia el precio del subyaciente.
+Vega cambio de la opcion cuando cambia la volatilidad.
+
+Ahora vamos a calcular la volatilidad hístorica contenida en diferentes opciones con diferentes precios de ejercicio, para un mismo punto del tiempo, con un vencimiento de 9 meses.
+
+```{r call 9 meses}
+K <- c(9,9.5,10,10.5,11,11.5,12,12.5,13,13.5,14)
+call9m<- c(2.81, 2.47, 2.15, 1.86, 1.60, 1.36, 1.16, .97,.81,.68,.56)
+```
+
+```{r}
+t <- 9/12
+vicall9m <-matrix(nrow =11 ,ncol = 1) 
+for (i in 1:11) {
+  vicall9m[i] <- bscallimpvol(s=So,k=K[i],r=r,tt=t,d=0,price=call9m[i])
+}
+```
+Lo graficamos y vemos
+```{r}
+plot(K,vicall9m, type ='l')
+```
+

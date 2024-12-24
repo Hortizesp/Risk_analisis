@@ -1,0 +1,94 @@
+---
+title: "BackTesting"
+output: html_document
+author: 'Montse OP'
+date: '25/04/2022'
+---
+
+El backtesting nos permite tener una dimensión sobre la pérdida máxima que estima el VaR. Consiste en analizar el comportamiento pasado del portafolio y analizar las veces que se presentó una excepción al VaR ocasionando una pérdida mayor a la esperada.
+
+Para nuestro ejemplo tenemos que el VaR diario al $90\%$ es de $-410.6983$.
+
+### **Paso 1: Lo primero que necesitamos para el Backtesting es el valor del portafolio a través del tiempo**
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(quantmod)
+library(lubridate)
+library(PerformanceAnalytics)
+```
+
+```{r message=FALSE, warning=FALSE}
+clave1 <- 'GFNORTEO.MX'
+clave2 <- 'BIMBOA.MX'
+datos <- new.env()
+getSymbols(clave1, env = datos)
+getSymbols(clave2, env = datos)
+```
+
+```{r}
+precio1 <- datos[[clave1]][,6]
+precio2 <- datos[[clave2]][,6]
+```
+
+```{r}
+a1 <- 100
+a2 <- 100
+
+v_porta <- a1 * precio1 + a2 * precio2
+```
+
+```{r}
+plot(v_porta)
+```
+
+### **Paso 2: Determinar las pérdidas o ganancias reales que ha tenido el portafolio a través del tiempo**
+
+```{r}
+var90 <- -410.6983
+
+per_gan_obs <- na.omit(diff(v_porta))
+hist(per_gan_obs, n = 50, freq = FALSE)
+lines(density(per_gan_obs), col = 'purple', lw = 2)
+abline(v = var90, col = 'red', lw = 2)
+```
+
+**Paso 3: Contar las excepciones que tenemos al VaR**
+
+```{r}
+btest_90 <- ifelse(per_gan_obs < var90, 1, 0)
+plot(btest_90)
+```
+
+```{r}
+pe90 <- sum(btest_90) / length(btest_90) * 100
+pe90
+```
+
+En consecuencia hay $1.85\%$ de días en los que la pérdida excedió al VaR al $90\%$.
+Como el número de excepciones al VaR es menor que la significancia del VaR (10%), el VaR es una buena medida para estimación de la pérdida máxima.
+
+```{r}
+var95 <- -584.4416
+var99 <- -1109.494 
+
+btest_95 <- ifelse(per_gan_obs < var95, 1, 0)
+btest_99 <- ifelse(per_gan_obs < var99, 1, 0)
+
+pe95 <- sum(btest_95) / length(btest_95) * 100
+pe99 <- sum(btest_99) / length(btest_99) * 100
+
+pe95
+pe99
+```
+
+Por último generaremos una tabla que contenga los resultados que obtuvimos.
+
+```{r}
+library(tidyverse)
+resultado <- tibble(ifelse(pe90 < 10, 'Adecuado', 'No adecuado'), 
+                    ifelse(pe95 < 5, 'Adecuado', 'No adecuado'),
+                    ifelse(pe99 < 1, 'Adecuado', 'No adecuado'))
+names(resultado) <- c('90', '95', '99')
+resultado
+```
+COnstruimos el VaR sin suponer nada sobre la distribución de pérdidas y ganancias.
